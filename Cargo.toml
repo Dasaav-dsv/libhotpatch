@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = ["libhotpatch-derive"]
+package.edition = "2024"
+
+[package]
+name = "libhotpatch"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+authors = ["Dasaav"]
+description = "Shared library live code reloading and hot-patching"
+readme = "README.md"
+repository = "https://github.com/Dasaav-dsv/libhotpatch"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+libhotpatch-derive.path = "libhotpatch-derive"
+atomic-wait = "1.1"
+libloading = ">=0.7.3, <0.9"
+log = { version = "0.4", features = ["std"] }
+stabby = { version = "72.1.1", git = "https://github.com/Dasaav-dsv/stabby.git", features = [
+    "libloading",
+] }
+tempfile = "3.23"
+linkme = "0.3"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_LibraryLoader"] }
+
+[profile.dev.package.xxhash-rust]
+opt-level = 3
