@@ -34,7 +34,7 @@ unsafe fn present_frame(dt: f32) {
 
 3. Build your library and **move the artifacts outside the build folder**. Otherwise, rebuilding will be blocked when the shared library is loaded into a process.
 
-4. Have a process load your library. Whenever you **rebuild**, the `#[hotpatch]` functions are **updated**.
+4. Have a process load your library **located outside the build folder**. Whenever you **rebuild**, the `#[hotpatch]` functions are **updated**.
 
 *NOTE:* use `libhotpatch::is_hotpatched` in blocking entry points (like `DllMain`) to exit early instead of repeating their logic when the library is reloaded.
 
@@ -45,6 +45,28 @@ Patched functions behave as if called with the arguments from the **original bui
 Consider the lifetime of any static items to be restricted to the scope of `#[hotpatch]` functions that access them, including any outgoing function calls. In general, statics are reset to their initial state. Persistent static state can be achieved by accessing a static outside of `#[hotpatch]` scope, and passing it down as an argument (with a `'static` lifetime).
 
 A `#[hotpatch]` function must not be marked `const`, `extern "Rust"`, use `Self`, use non-lifetime generic or `impl Trait` parameters. It *must be* marked `unsafe`.
+
+`libhotpatch` uses the `log` crate to emit trace, debug and error logs. You can use a logging implementation compatible with `log` to capture them.
+
+## Conditional attribute configuration
+
+Your crate can define a feature and use [`cfg_attr`](https://doc.rust-lang.org/reference/conditional-compilation.html) to conditionally enable `#[hotpatch]` on functions.
+
+In Cargo.toml:
+
+```toml
+[features]
+hotpatch = []
+```
+
+In a source file:
+
+```rs
+#[cfg_attr(feature = "hotpatch", libhotpatch::hotpatch)]
+unsafe fn present_frame(dt: f32) {
+    // The body of this function will be updated live when your crate is rebuilt.
+}
+```
 
 ## License
 Licensed under either of
