@@ -15,7 +15,7 @@ This library strives to be memory safe, but it can only *attempt to* safeguard y
 crate-type = ["cdylib"]
 
 [dependencies]
-libhotpatch = { version = "0.1.0", git = "https://github.com/Dasaav-dsv/libhotpatch" }
+libhotpatch = { version = "0.1.2", git = "https://github.com/Dasaav-dsv/libhotpatch.git" }
 ```
 
 2. Annotate functions with `#[hotpatch]` (*NOTE:* the functions *must* also be marked `unsafe`):
