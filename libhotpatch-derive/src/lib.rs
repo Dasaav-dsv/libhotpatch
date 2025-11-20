@@ -28,7 +28,7 @@ pub fn hotpatch(
 
     sig.abi.get_or_insert_with(|| Abi {
         extern_token: Extern(Span::call_site()),
-        name: Some(LitStr::new("C", Span::call_site())),
+        name: Some(LitStr::new("C-unwind", Span::call_site())),
     });
 
     let sig_str = quote!(sig).to_string();
