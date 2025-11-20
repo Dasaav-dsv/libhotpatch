@@ -1,5 +1,5 @@
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use quote::{ToTokens, quote};
 use syn::{
     Abi, FnArg, ImplItemFn, LitByteStr, LitStr, Pat, PatWild, Token, parse_macro_input,
     parse_quote, token::Extern,
@@ -39,7 +39,7 @@ pub fn hotpatch(
 
     let args = inner.sig.inputs.iter().map(|input| match input {
         FnArg::Receiver(_) => parse_quote!(self),
-        FnArg::Typed(typed) => fn_input_pat_to_ident(&typed.pat),
+        FnArg::Typed(typed) => fn_input_pat_to_ts(&typed.pat),
     });
 
     let wild = inner.sig.inputs.iter().map(|_| PatWild {
@@ -81,14 +81,11 @@ pub fn hotpatch(
     .into()
 }
 
-fn fn_input_pat_to_ident(pat: &Pat) -> TokenStream {
+fn fn_input_pat_to_ts(pat: &Pat) -> TokenStream {
     match pat {
-        Pat::Ident(pat_ident) => {
-            let ident = pat_ident.ident.clone();
-            parse_quote!(#ident)
-        }
-        Pat::Paren(pat_paren) => fn_input_pat_to_ident(&pat_paren.pat),
-        Pat::Reference(pat_ref) => fn_input_pat_to_ident(&pat_ref.pat),
+        Pat::Ident(pat_ident) => pat_ident.ident.clone().to_token_stream(),
+        Pat::Paren(pat_paren) => fn_input_pat_to_ts(&pat_paren.pat),
+        Pat::Reference(pat_ref) => fn_input_pat_to_ts(&pat_ref.pat),
         Pat::Tuple(pat_tuple) => {
             let elems = &pat_tuple.elems;
             parse_quote!((#elems))
@@ -101,7 +98,7 @@ fn fn_input_pat_to_ident(pat: &Pat) -> TokenStream {
         }
         Pat::TupleStruct(pat_tstruct) => {
             let path = &pat_tstruct.path;
-            let elems = pat_tstruct.elems.iter().map(fn_input_pat_to_ident);
+            let elems = pat_tstruct.elems.iter().map(fn_input_pat_to_ts);
 
             parse_quote!(#path(#(#elems,)*))
         }
