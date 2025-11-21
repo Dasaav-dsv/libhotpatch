@@ -177,7 +177,19 @@ impl Watcher {
         fs::copy(hotpatch_library_path, &temp_path)?;
 
         log::debug!("loading library {temp_path:?}");
+
+        #[cfg(not(unix))]
         let lib = unsafe { libloading::Library::new(&temp_path).map_err(io::Error::other)? };
+
+        #[cfg(unix)]
+        let lib = unsafe {
+            libloading::os::unix::Library::open(
+                Some(&temp_path),
+                libc::RTLD_LOCAL | libc::RTLD_LAZY | libc::RTLD_NODELETE,
+            )
+            .map(libloading::Library::from)
+            .map_err(io::Error::other)?
+        };
 
         let init_watcher = unsafe {
             lib.get_stabbied::<extern "C" fn(&'static Watcher)>(b"__libhotpatch_init_watcher")

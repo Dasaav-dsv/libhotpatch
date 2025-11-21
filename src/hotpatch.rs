@@ -54,12 +54,6 @@ impl LibraryHandle {
 
 impl LibraryPayload {
     pub fn make_handle(lib: Library, dir: TempDir) -> LibraryHandle {
-        #[cfg(unix)]
-        let lib = {
-            mem::forget(lib);
-            stabby::tuple::Tuple0
-        };
-
         let payload_inner: stabby::dynptr!(StabbyBox<dyn Send>) =
             StabbyBox::new(Tuple2(lib, dir)).into();
 
