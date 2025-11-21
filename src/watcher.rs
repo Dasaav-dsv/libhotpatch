@@ -91,7 +91,11 @@ impl Watcher {
             .duration_since(UNIX_EPOCH)
             .unwrap();
 
-        fs::create_dir(format!("{TARGET_DIR}/.hotpatch"))?;
+        if let Err(e) = fs::create_dir(format!("{TARGET_DIR}/.hotpatch"))
+            && e.kind() != io::ErrorKind::AlreadyExists
+        {
+            return Err(e);
+        }
 
         let bytes = fs::read(current_library.file_path())?;
         let hash = xxh3_64(&bytes);

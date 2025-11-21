@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["libhotpatch-derive"]
+members = ["libhotpatch-derive", "libhotpatch-test"]
 package.edition = "2024"
 
 [package]
 name = "libhotpatch"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.91"
 authors = ["Dasaav"]
