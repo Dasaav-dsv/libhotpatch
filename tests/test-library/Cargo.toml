@@ -1,0 +1,17 @@
+[package]
+name = "test-library"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+env_logger = { version = "0.11.8", default-features = false }
+libhotpatch = { version = "0.1.5", git = "https://github.com/Dasaav-dsv/libhotpatch.git" }
+
+[features]
+default = ["v1"]
+v1 = []
+v2 = []
+v3 = []
