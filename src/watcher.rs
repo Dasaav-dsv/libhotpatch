@@ -148,7 +148,7 @@ impl Watcher {
             log::trace!("file hash matched, no update required");
 
             self.library_modified.store(
-                library_last_modified.into(),
+                hotpatch_library_modified.into(),
                 stabby::time::Sign::Positive,
                 AtomicOrdering::Relaxed,
             );
