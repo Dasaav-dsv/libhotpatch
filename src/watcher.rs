@@ -146,6 +146,13 @@ impl Watcher {
 
         if hotpatch_library_hash == self.library_hash.load(AtomicOrdering::Relaxed) {
             log::trace!("file hash matched, no update required");
+
+            self.library_modified.store(
+                library_last_modified.into(),
+                stabby::time::Sign::Positive,
+                AtomicOrdering::Relaxed,
+            );
+
             return Ok(());
         }
 
