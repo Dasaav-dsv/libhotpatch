@@ -5,7 +5,7 @@ unsafe fn add(a: i32, b: i32) -> i32 {
     a + b
 }
 
-#[hotpatch(unsafe)]
+#[hotpatch]
 unsafe fn add_tuple((a, b): (i32, i32)) -> i32 {
     a + b
 }
@@ -48,6 +48,26 @@ fn call_add_tstruct() {
 #[test]
 fn call_lifetime_bound() {
     assert_eq!(unsafe { lifetime_bound(&1) }, &1);
+}
+
+#[hotpatch(checked)]
+unsafe fn add_checked(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[hotpatch(checked)]
+unsafe fn add_tuple_checked((a, b): (i32, i32)) -> i32 {
+    a + b
+}
+
+#[test]
+fn call_add_checked() {
+    assert_eq!(unsafe { add_checked(2, 2) }, 4);
+}
+
+#[test]
+fn call_add_tuple_checked() {
+    assert_eq!(unsafe { add_checked(2, 2) }, 4);
 }
 
 #[repr(C)]

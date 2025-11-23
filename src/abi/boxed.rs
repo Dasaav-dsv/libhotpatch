@@ -1,10 +1,10 @@
-use core::slice;
 use std::{
     alloc::{Layout, handle_alloc_error},
     ffi::c_void,
     mem,
     ops::Deref,
     ptr::{self, NonNull},
+    slice,
 };
 
 use crate::os::{aligned_alloc, free};
@@ -69,6 +69,28 @@ impl<T: Copy> BoxedSlice<T> {
         }
 
         Self { ptr, len }
+    }
+
+    #[inline]
+    pub fn into_raw(self) -> *mut [T] {
+        let ptr = self.ptr.as_ptr();
+        let len = self.len;
+        mem::forget(self);
+        ptr::slice_from_raw_parts_mut(ptr, len)
+    }
+
+    /// # Safety:
+    ///
+    /// `ptr` must be derived from a previous call to [`Box::into_raw`] and this method must not
+    /// be called more than once on such pointer.
+    #[inline]
+    pub unsafe fn from_raw(ptr: *mut [T]) -> Self {
+        unsafe {
+            Self {
+                ptr: NonNull::new_unchecked(ptr as *mut T),
+                len: ptr.len(),
+            }
+        }
     }
 }
 

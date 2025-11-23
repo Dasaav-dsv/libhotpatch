@@ -1,4 +1,3 @@
-use core::slice;
 use std::{
     alloc::{Layout, handle_alloc_error},
     ffi::c_void,
@@ -6,6 +5,7 @@ use std::{
     marker::PhantomData,
     ops::Deref,
     ptr::NonNull,
+    slice,
 };
 
 use crate::os::{aligned_alloc, free};

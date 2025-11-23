@@ -15,7 +15,7 @@ This library strives to be memory safe, but it can only *attempt to* safeguard y
 crate-type = ["cdylib"]
 
 [dependencies]
-libhotpatch = "1.0.0"
+libhotpatch = "1.1.0"
 ```
 
 2. Annotate functions with `#[hotpatch]` (*NOTE:* the functions *must* also be marked `unsafe`):
@@ -47,6 +47,10 @@ Consider the lifetime of any static items to be restricted to the scope of `#[ho
 A `#[hotpatch]` function must not be marked `const`, `extern "Rust"`, use `Self`, use non-lifetime generic or `impl Trait` parameters. It *must be* marked `unsafe`.
 
 `libhotpatch` uses the `log` crate to emit trace, debug and error logs. You can use a logging implementation compatible with `log` to capture them.
+
+## Features
+
+- "checked": Enables the `checked` attribute for `#[hotpatch]`. `#[hotpatch(checked)]` function inputs and outputs are passed through a `rmp-serde` serialization layer, panicking on failure. This greatly enhances safety at the cost of runtime performance.
 
 ## Conditional attribute configuration
 

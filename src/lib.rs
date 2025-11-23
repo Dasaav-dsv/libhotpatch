@@ -22,6 +22,14 @@ pub use linkme;
 #[doc(hidden)]
 pub use linkme::distributed_slice;
 
+// Proc macro reexports for `rmp-serde`:
+#[cfg(feature = "checked")]
+#[doc(hidden)]
+pub use rmp_serde;
+#[cfg(feature = "checked")]
+#[doc(hidden)]
+pub use abi::boxed::BoxedSlice;
+
 pub use libhotpatch_macros::hotpatch;
 
 pub(crate) static TARGET_DIR: &str = env!("LIBHOTPATCH_TARGET_DIR");
