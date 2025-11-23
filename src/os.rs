@@ -10,6 +10,11 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(unix)]
+pub use unix::{aligned_alloc, free};
+#[cfg(windows)]
+pub use windows::{aligned_alloc, free};
+
 #[derive(Debug)]
 pub struct Module {
     path: PathBuf,

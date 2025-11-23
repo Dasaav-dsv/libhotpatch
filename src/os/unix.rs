@@ -22,3 +22,15 @@ pub fn current_module_path() -> Option<PathBuf> {
         os_str.into()
     })
 }
+
+#[inline]
+pub fn aligned_alloc(size: usize, align: usize) -> *mut c_void {
+    unsafe { libc::aligned_alloc(align, size) }
+}
+
+#[inline]
+pub unsafe fn free(ptr: *mut c_void) {
+    unsafe {
+        libc::free(ptr);
+    }
+}

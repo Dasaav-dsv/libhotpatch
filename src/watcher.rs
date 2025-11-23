@@ -9,26 +9,30 @@ use std::{
 };
 
 use atomic_wait::{wait, wake_all};
-use stabby::{
-    libloading::StabbyLibrary,
-    str::Str,
-    time::{AtomicDuration, AtomicInstant},
-};
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::{TARGET_DIR, hotpatch::update_fn_table, lock::HotpatchLock, os::Module};
+use crate::{
+    TARGET_DIR,
+    abi::{
+        str::Str,
+        time::{AtomicDuration, AtomicInstant},
+    },
+    hotpatch::update_fn_table,
+    lock::HotpatchLock,
+    os::Module,
+};
 
-#[stabby::stabby]
+#[repr(C)]
 pub struct Watcher {
     last_update: AtomicInstant,
-    update_lock: AtomicU32,
+    library_modified: AtomicDuration,
     library_hash: AtomicU64,
     library_name: Str<'static>,
-    library_modified: AtomicDuration,
+    update_lock: AtomicU32,
 }
 
 impl Watcher {
-    const POLL_MS: u64 = 128;
+    const POLL_MS: u64 = 100;
 
     pub fn get() -> Option<&'static Watcher> {
         *WATCHER.get_or_init(|| {
@@ -39,7 +43,8 @@ impl Watcher {
     }
 
     pub fn poll(&'static self) {
-        let last_update = Instant::from(self.last_update.load(AtomicOrdering::Relaxed));
+        let last_update = self.last_update.load(AtomicOrdering::Relaxed);
+
         if last_update.elapsed() < Duration::from_millis(Self::POLL_MS) {
             return;
         }
@@ -66,7 +71,7 @@ impl Watcher {
         let _ = self.update();
 
         self.last_update
-            .store(stabby::time::Instant::now(), AtomicOrdering::Relaxed);
+            .store(Instant::now(), AtomicOrdering::Relaxed);
     }
 
     fn new() -> io::Result<&'static Watcher> {
@@ -79,7 +84,7 @@ impl Watcher {
 
         if unsafe {
             loaded_library
-                .get_stabbied::<extern "C" fn(&'static Watcher)>(b"__libhotpatch_init_watcher")
+                .get::<extern "C" fn(&'static Watcher)>(b"__libhotpatch_init_watcher")
                 .is_err()
         } {
             return Err(io::Error::other("not all exports are available"));
@@ -106,14 +111,11 @@ impl Watcher {
             .ok_or(io::ErrorKind::InvalidFilename)?;
 
         let watcher = Box::new(Watcher {
-            library_name: Str::new(Box::leak(library_name.into())),
-            update_lock: AtomicU32::new(0),
-            library_hash: AtomicU64::new(hash),
             last_update: AtomicInstant::now(),
-            library_modified: AtomicDuration::new(
-                time_modified.into(),
-                stabby::time::Sign::Positive,
-            ),
+            update_lock: AtomicU32::new(0),
+            library_modified: AtomicDuration::new(time_modified),
+            library_name: Str::new(Box::leak(library_name.into())),
+            library_hash: AtomicU64::new(hash),
         });
 
         Ok(Box::leak(watcher))
@@ -130,12 +132,9 @@ impl Watcher {
             .duration_since(UNIX_EPOCH)
             .unwrap();
 
-        let library_last_modified =
-            Duration::from(self.library_modified.load(AtomicOrdering::Relaxed).0);
+        let library_last_modified = self.library_modified.load(AtomicOrdering::Relaxed);
 
-        if hotpatch_library_modified.as_millis() / Self::POLL_MS as u128
-            == library_last_modified.as_millis() / Self::POLL_MS as u128
-        {
+        if hotpatch_library_modified.as_millis() == library_last_modified.as_millis() {
             return Ok(());
         }
 
@@ -147,11 +146,8 @@ impl Watcher {
         if hotpatch_library_hash == self.library_hash.load(AtomicOrdering::Relaxed) {
             log::trace!("file hash matched, no update required");
 
-            self.library_modified.store(
-                hotpatch_library_modified.into(),
-                stabby::time::Sign::Positive,
-                AtomicOrdering::Relaxed,
-            );
+            self.library_modified
+                .store(hotpatch_library_modified, AtomicOrdering::Relaxed);
 
             return Ok(());
         }
@@ -159,11 +155,8 @@ impl Watcher {
         self.hotpatch_library(&hotpatch_library_path)
             .inspect_err(|e| log::error!("error hot-patching library: {e}"))?;
 
-        self.library_modified.store(
-            hotpatch_library_modified.into(),
-            stabby::time::Sign::Positive,
-            AtomicOrdering::Relaxed,
-        );
+        self.library_modified
+            .store(hotpatch_library_modified, AtomicOrdering::Relaxed);
 
         self.library_hash
             .store(hotpatch_library_hash, AtomicOrdering::Relaxed);
@@ -177,8 +170,8 @@ impl Watcher {
         log::debug!("acquiring file lock");
         let _file_lock = HotpatchLock::new()?;
 
-        let tempdir = tempfile::tempdir_in(format!("{TARGET_DIR}/.hotpatch"))?;
-        let temp_path = tempdir.path().join(self.library_name.as_str());
+        let temp_dir = tempfile::tempdir_in(format!("{TARGET_DIR}/.hotpatch"))?;
+        let temp_path = temp_dir.path().join(self.library_name.as_str());
 
         log::debug!("using temporary path {temp_path:?}");
         fs::copy(hotpatch_library_path, &temp_path)?;
@@ -199,7 +192,7 @@ impl Watcher {
         };
 
         let init_watcher = unsafe {
-            lib.get_stabbied::<extern "C" fn(&'static Watcher)>(b"__libhotpatch_init_watcher")
+            lib.get::<extern "C" fn(&'static Watcher)>(b"__libhotpatch_init_watcher")
                 .map_err(io::Error::other)?
         };
 
@@ -207,7 +200,7 @@ impl Watcher {
         init_watcher(self);
 
         log::debug!("patching function table");
-        update_fn_table(lib, tempdir)?;
+        update_fn_table(lib, temp_dir)?;
 
         Ok(())
     }
@@ -215,7 +208,7 @@ impl Watcher {
 
 static WATCHER: OnceLock<Option<&Watcher>> = OnceLock::new();
 
-#[stabby::export]
+#[unsafe(no_mangle)]
 extern "C" fn __libhotpatch_init_watcher(watcher: &'static Watcher) {
     let _ = WATCHER.get_or_init(|| Some(watcher));
 }

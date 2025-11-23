@@ -1,9 +1,8 @@
+#[cfg(unix)]
+use std::ffi::c_void;
 use std::{
     cmp::Ordering,
-    io,
-    marker::PhantomData,
-    mem,
-    ptr::{self, NonNull},
+    fs, io, mem, ptr,
     sync::{
         LazyLock,
         atomic::{AtomicPtr, AtomicU64, Ordering as AtomicOrdering, fence},
@@ -11,28 +10,31 @@ use std::{
 };
 
 use libloading::Library;
-use stabby::{
-    alloc::{AllocPtr, DefaultAllocator},
-    boxed::{Box as StabbyBox, BoxedSlice},
-    libloading::StabbyLibrary,
-    str::Str,
-    tuple::Tuple2,
-    vec::Vec as StabbyVec,
-};
 use tempfile::TempDir;
+
+use crate::abi::{
+    boxed::{Box as AbiBox, BoxedSlice},
+    str::{BoxedStr, Str},
+};
 
 #[linkme::distributed_slice]
 pub static HOTPATCH_FN: [(AtomicPtr<()>, LibraryHandle, fn() -> (u128, &'static str))] = [..];
 
-#[stabby::stabby]
+#[repr(C)]
 pub struct LibraryHandle {
     ptr: AtomicPtr<LibraryPayload>,
 }
 
-#[stabby::stabby]
-pub struct LibraryPayload {
+#[repr(C)]
+struct LibraryPayload {
     refcount: AtomicU64,
-    inner: stabby::dynptr!(StabbyBox<dyn Send>),
+
+    #[cfg(unix)]
+    lib_handle: *mut c_void,
+    #[cfg(windows)]
+    lib_handle: isize,
+
+    temp_path: BoxedStr,
 }
 
 impl LibraryHandle {
@@ -54,18 +56,19 @@ impl LibraryHandle {
 
 impl LibraryPayload {
     pub fn make_handle(lib: Library, dir: TempDir) -> LibraryHandle {
-        let payload_inner: stabby::dynptr!(StabbyBox<dyn Send>) =
-            StabbyBox::new(Tuple2(lib, dir)).into();
-
-        let payload = StabbyBox::new(Self {
+        let payload = AbiBox::new(Self {
             refcount: AtomicU64::new(1),
-            inner: payload_inner,
+
+            #[cfg(unix)]
+            lib_handle: libloading::os::unix::Library::from(lib).into_raw(),
+            #[cfg(windows)]
+            lib_handle: libloading::os::windows::Library::from(lib).into_raw(),
+
+            temp_path: BoxedStr::new(dir.path().to_string_lossy()),
         });
 
-        let payload_ptr = StabbyBox::into_raw(payload).ptr.as_ptr();
-
         LibraryHandle {
-            ptr: AtomicPtr::new(payload_ptr),
+            ptr: AtomicPtr::new(AbiBox::into_raw(payload)),
         }
     }
 }
@@ -75,6 +78,8 @@ impl Clone for LibraryHandle {
         let payload_ptr = self.ptr.load(AtomicOrdering::Relaxed);
 
         if !payload_ptr.is_null() {
+            // SAFETY: pointer is not null and points to an initialized `LibraryPayload`,
+            // since there was an open handle to it (self).
             unsafe {
                 let _ = (*payload_ptr)
                     .refcount
@@ -92,13 +97,14 @@ impl Drop for LibraryHandle {
     fn drop(&mut self) {
         let payload_ptr = self.ptr.load(AtomicOrdering::Relaxed);
 
-        let Some(payload_ptr) = NonNull::new(payload_ptr) else {
+        if payload_ptr.is_null() {
             return;
-        };
+        }
 
+        // SAFETY: pointer is not null and points to an initialized `LibraryPayload`,
+        // since there was an open handle to it (self).
         if unsafe {
-            payload_ptr
-                .as_ref()
+            (*payload_ptr)
                 .refcount
                 .fetch_sub(1, AtomicOrdering::Release)
                 != 1
@@ -111,19 +117,28 @@ impl Drop for LibraryHandle {
 
         log::debug!("dropping library payload");
 
-        let payload = unsafe {
-            StabbyBox::<_, DefaultAllocator>::from_raw(AllocPtr {
-                ptr: payload_ptr,
-                marker: PhantomData,
-            })
-        };
-
+        // SAFETY: pointer is obtained from `Box::into_raw`.
+        let payload = unsafe { AbiBox::from_raw(payload_ptr) };
         drop(payload);
     }
 }
 
-#[stabby::stabby]
-pub struct HotpatchFn {
+impl Drop for LibraryPayload {
+    fn drop(&mut self) {
+        // SAFETY: handle is obtained from `Library::into_raw`.
+        unsafe {
+            #[cfg(unix)]
+            let _ = libloading::os::unix::Library::from_raw(self.lib_handle);
+            #[cfg(windows)]
+            let _ = libloading::os::windows::Library::from_raw(self.lib_handle);
+        }
+        let _ = fs::remove_dir(&*self.temp_path);
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct HotpatchFn {
     fn_ptr: &'static AtomicPtr<()>,
     handle: &'static LibraryHandle,
     hash: u128,
@@ -131,12 +146,11 @@ pub struct HotpatchFn {
 }
 
 pub fn update_fn_table(hotpatch_library: Library, dir: TempDir) -> io::Result<()> {
-    static CACHED_HOTPATCH_FN: LazyLock<BoxedSlice<HotpatchFn>> =
-        LazyLock::new(|| build_fn_table().into());
+    static CACHED_HOTPATCH_FN: LazyLock<BoxedSlice<HotpatchFn>> = LazyLock::new(build_fn_table);
 
     let fn_table = unsafe {
         hotpatch_library
-            .get_stabbied::<extern "C" fn() -> BoxedSlice<HotpatchFn>>(b"__libhotpatch_fn_table")
+            .get::<extern "C" fn() -> BoxedSlice<HotpatchFn>>(b"__libhotpatch_fn_table")
             .map(|getter| getter())
             .map_err(io::Error::other)
     };
@@ -184,7 +198,7 @@ pub fn update_fn_table(hotpatch_library: Library, dir: TempDir) -> io::Result<()
     Ok(())
 }
 
-fn build_fn_table() -> StabbyVec<HotpatchFn> {
+fn build_fn_table() -> BoxedSlice<HotpatchFn> {
     let mut hotpatch_fns = HOTPATCH_FN
         .iter()
         .map(|(fn_ptr, handle, type_of)| {
@@ -196,14 +210,14 @@ fn build_fn_table() -> StabbyVec<HotpatchFn> {
                 name: Str::new(name),
             }
         })
-        .collect::<StabbyVec<_>>();
+        .collect::<Vec<_>>();
 
     hotpatch_fns.sort_by(|a, b| a.hash.cmp(&b.hash));
 
-    hotpatch_fns
+    BoxedSlice::new(&hotpatch_fns)
 }
 
-#[stabby::export]
+#[unsafe(no_mangle)]
 extern "C" fn __libhotpatch_fn_table() -> BoxedSlice<HotpatchFn> {
-    BoxedSlice::from(build_fn_table())
+    build_fn_table()
 }

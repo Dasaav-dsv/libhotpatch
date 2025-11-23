@@ -1,4 +1,4 @@
-use std::{env, fs, path::Path, process::Command};
+use std::{env, fs, path::Path, process::Command, time::Duration};
 
 use libloading::{Library, library_filename};
 
@@ -48,4 +48,6 @@ fn build_test_lib(version: &str) {
         .success();
 
     assert!(cargo_build_test_lib, "failed to build test library");
+
+    std::thread::sleep(Duration::from_millis(100));
 }

@@ -1,5 +1,4 @@
 use libhotpatch::hotpatch;
-use stabby::tuple::Tuple2;
 
 #[hotpatch]
 unsafe fn add(a: i32, b: i32) -> i32 {
@@ -51,7 +50,10 @@ fn call_lifetime_bound() {
     assert_eq!(unsafe { lifetime_bound(&1) }, &1);
 }
 
-#[stabby::stabby]
+#[repr(C)]
+struct Tuple2<A, B>(A, B);
+
+#[repr(C)]
 struct Add {
     a: i32,
     b: i32,
