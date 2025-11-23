@@ -22,7 +22,7 @@ pub use linkme;
 #[doc(hidden)]
 pub use linkme::distributed_slice;
 
-pub use libhotpatch_derive::hotpatch;
+pub use libhotpatch_macros::hotpatch;
 
 pub(crate) static TARGET_DIR: &str = env!("LIBHOTPATCH_TARGET_DIR");
 

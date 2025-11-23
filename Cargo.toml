@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["libhotpatch-derive", "tests/test-library"]
+members = ["libhotpatch-macros", "tests/test-library"]
 package.edition = "2024"
 package.authors = ["Dasaav"]
 package.repository = "https://github.com/Dasaav-dsv/libhotpatch"
@@ -18,7 +18,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-libhotpatch-derive = { version = "0.1.0", path = "libhotpatch-derive" }
+libhotpatch-macros = { version = "0.1.0", path = "libhotpatch-macros" }
 atomic-wait = "1.1"
 libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
