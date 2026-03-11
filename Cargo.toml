@@ -8,7 +8,7 @@ package.license = "MIT OR Apache-2.0"
 
 [package]
 name = "libhotpatch"
-version = "1.1.0"
+version = "1.2.0"
 edition.workspace = true
 rust-version = "1.91"
 authors.workspace = true

@@ -54,14 +54,14 @@ impl Watcher {
             .compare_exchange(0, 1, AtomicOrdering::Acquire, AtomicOrdering::Relaxed)
             .is_err()
         {
-            wait(&self.update_lock, 0);
+            wait(&self.update_lock, 1);
             return;
         }
 
         struct LockGuard<'a>(&'a AtomicU32);
         impl Drop for LockGuard<'_> {
             fn drop(&mut self) {
-                self.0.store(0, AtomicOrdering::Relaxed);
+                self.0.store(0, AtomicOrdering::Release);
                 wake_all(self.0);
             }
         }
